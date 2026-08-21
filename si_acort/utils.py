@@ -1,23 +1,14 @@
-"""Shared constructions and selective-inference utilities for SI-ACoRT."""
-
-from __future__ import annotations
-
 import math
 
 import numpy as np
-import scipy.special
+from scipy.stats import norm
 
 
 def construct_active_set(beta):
-    """Return the exact nonzero support of a coefficient vector."""
     return np.flatnonzero(np.asarray(beta) != 0.0).tolist()
 
 
 def construct_folds(n0, T=5, shuffle=False, random_state=0):
-    if T <= 0:
-        raise ValueError("T must be positive")
-    if T > n0:
-        raise ValueError("T cannot exceed the target sample size")
     indices = np.arange(n0)
     if shuffle:
         indices = np.random.default_rng(random_state).permutation(indices)
@@ -102,7 +93,6 @@ def intersect_interval_lists(intervals_a, intervals_b, tol=1e-8):
 
 
 def solve_quadratic_ineq(A, B, C, tol=1e-12):
-    """Solve A*z**2 + B*z + C <= 0 on the real line."""
     A = float(A)
     B = float(B)
     C = float(C)
@@ -134,13 +124,7 @@ def point_in_interval_list(value, intervals, tol=1e-10):
 
 def construct_test_statistic(j, X0M, Y, M, n0, n):
     M = list(M)
-    if j not in M:
-        raise ValueError("j must belong to M")
-    if not 0 < n0 <= n:
-        raise ValueError("The sample sizes must satisfy 0 < n0 <= n")
     X0M = np.asarray(X0M, dtype=float)
-    if X0M.ndim != 2 or X0M.shape != (n0, len(M)):
-        raise ValueError("X0M must have shape (n0, len(M)) for the selected target design" )
     ej = np.zeros(len(M))
     ej[M.index(j)] = 1.0
     gram_solution = np.linalg.solve(X0M.T @ X0M, ej)
@@ -149,37 +133,29 @@ def construct_test_statistic(j, X0M, Y, M, n0, n):
     eta = np.zeros(n)
     eta[-n0:] = tail
     Y = np.asarray(Y, dtype=float).reshape(-1)
-    if Y.size != n:
-        raise ValueError(f"Y has size {Y.size}, but the test statistic expects n={n}" )
     etaTY = float(eta @ Y)
     return eta.reshape(-1, 1), etaTY
 
 
-def _normal_interval_masses(left, right, mean, sigma):
-    """Gaussian masses for possibly infinite interval endpoints."""
-    if not np.isfinite(sigma) or sigma <= 0.0:
-        raise ValueError(f"The Gaussian standard deviation must be positive; got {sigma}" )
-
+def _normal_interval_probabilities(left, right, mean, sigma):
     left = np.asarray(left, dtype=float)
     right = np.asarray(right, dtype=float)
     left, right = np.broadcast_arrays(left, right)
-    if np.any(np.isnan(left)) or np.any(np.isnan(right)):
-        raise ValueError("Gaussian interval endpoints cannot be NaN")
 
-    masses = np.zeros(left.shape, dtype=float)
+    probabilities = np.zeros(left.shape, dtype=float)
     valid = right > left
     if not np.any(valid):
-        return masses
+        return probabilities
 
     z_left = (left[valid] - mean) / sigma
     z_right = (right[valid] - mean) / sigma
-    valid_masses = np.empty(z_left.shape, dtype=float)
+    valid_probabilities = np.empty(z_left.shape, dtype=float)
 
     positive = z_left >= 0.0
-    valid_masses[positive] = (scipy.special.ndtr(-z_left[positive]) - scipy.special.ndtr(-z_right[positive]) )
-    valid_masses[~positive] = (scipy.special.ndtr(z_right[~positive]) - scipy.special.ndtr(z_left[~positive]) )
-    masses[valid] = np.maximum(valid_masses, 0.0)
-    return masses
+    valid_probabilities[positive] = norm.sf(z_left[positive]) - norm.sf(z_right[positive])
+    valid_probabilities[~positive] = norm.cdf(z_right[~positive]) - norm.cdf(z_left[~positive])
+    probabilities[valid] = np.maximum(valid_probabilities, 0.0)
+    return probabilities
 
 
 def calculate_a_b(eta, Y, Sigma):
@@ -197,25 +173,18 @@ def calculate_a_b(eta, Y, Sigma):
 
 
 def calculate_TN_p_value(intervals, eta, etaTY, Sigma, tn_mu=0.0):
-    """Paper's p-value P(|Z| >= |etaTY| | Z belongs to the interval union)."""
     intervals = [(left, right) for left, right in merge_intervals(intervals) if right > left ]
     if not intervals:
         raise ValueError("The truncation region is empty")
 
-    variance = float(eta.ravel() @ Sigma @ eta.ravel())
-    if not np.isfinite(variance) or variance <= 0.0:
-        raise ValueError(f"eta.T @ Sigma @ eta must be positive; got {variance}")
-    sigma = math.sqrt(variance)
+    sigma = math.sqrt(float(eta.ravel() @ Sigma @ eta.ravel()))
     bounds = np.asarray(intervals, dtype=float)
-    denominator = float(np.sum(_normal_interval_masses(bounds[:, 0], bounds[:, 1], tn_mu, sigma ) ) )
+    denominator = float(np.sum(_normal_interval_probabilities(bounds[:, 0], bounds[:, 1], tn_mu, sigma ) ) )
     if denominator <= 0.0:
-        raise ValueError("The truncation region has zero Gaussian mass")
+        raise ValueError("The truncation region has zero Gaussian probability")
 
     cutoff = abs(float(etaTY))
-    left_tail_mass = np.sum(_normal_interval_masses(bounds[:, 0], np.minimum(bounds[:, 1], -cutoff), tn_mu, sigma) )
-    right_tail_mass = np.sum(_normal_interval_masses(np.maximum(bounds[:, 0], cutoff), bounds[:, 1], tn_mu, sigma) )
-    numerator = float(left_tail_mass + right_tail_mass)
+    left_tail_probability = np.sum(_normal_interval_probabilities(bounds[:, 0], np.minimum(bounds[:, 1], -cutoff), tn_mu, sigma) )
+    right_tail_probability = np.sum(_normal_interval_probabilities(np.maximum(bounds[:, 0], cutoff), bounds[:, 1], tn_mu, sigma) )
+    numerator = float(left_tail_probability + right_tail_probability)
     return float(np.clip(numerator / denominator, 0.0, 1.0))
-
-
-__all__ = ["calculate_TN_p_value", "calculate_a_b", "complement_fold_indices", "construct_X_tilde", "construct_Y_tilde", "construct_active_set", "construct_block_slices", "construct_f", "construct_folds", "construct_test_statistic", "construct_w_tilde", "intersect_interval_lists", "merge_intervals", "point_in_interval_list", "solve_quadratic_ineq"]

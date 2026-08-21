@@ -1,7 +1,3 @@
-"""High-level selective-inference entry points for SI-ACoRT."""
-
-from __future__ import annotations
-
 import math
 
 import numpy as np
@@ -22,26 +18,17 @@ from .utils import (
 
 
 def construct_observed_state(X_list, Y_list, lambda_list, lam, T=5, solver="homotopy"):
-    """Run the observed source-selection and CoRT stages."""
-    if len(X_list) != len(Y_list):
-        raise ValueError("X_list and Y_list must have the same length")
-    if len(X_list) != len(lambda_list):
-        raise ValueError("lambda_list must contain one value per data block")
-    if len(X_list) < 1:
-        raise ValueError("At least the target data block is required")
+    if solver not in {"homotopy", "skglm"}:
+        raise ValueError("solver must be 'homotopy' or 'skglm'")
+    if lam <= 0.0 or any(value <= 0.0 for value in lambda_list):
+        raise ValueError("The penalty parameters must be strictly positive")
+    if not 0 < T <= len(Y_list[-1]) or T % 2 == 0:
+        raise ValueError("T must be odd and between 1 and the target sample size")
     folds = construct_folds(len(Y_list[-1]), T)
-    if len(folds) % 2 == 0:
-        raise ValueError("The number of folds T must be odd")
 
     X_list = [np.asarray(X, dtype=float) for X in X_list]
     Y_list = [np.asarray(Y, dtype=float).reshape(-1) for Y in Y_list]
     p = X_list[0].shape[1]
-    if any(X.ndim != 2 or X.shape[1] != p for X in X_list):
-        raise ValueError("All design matrices must have the same column dimension")
-    if any(X.shape[0] != Y.size for X, Y in zip(X_list, Y_list)):
-        raise ValueError("Each design block must match its response block")
-    if any(value <= 0.0 for value in lambda_list):
-        raise ValueError("Every CoRT penalty must be strictly positive")
 
     n_list = [X.shape[0] for X in X_list]
     I_obs = adaptive_source_selection(X_list, Y_list, folds, lam, solver)
@@ -63,25 +50,12 @@ def construct_observed_state(X_list, Y_list, lambda_list, lam, T=5, solver="homo
     }
 
 
-def calculate_feature_p_value(observed_state, j, lambda_list, lam, Sigma_list, threshold=20.0, anchor_cache=None, solver=None):
-    """Calculate the SI-ACoRT p-value for one selected target feature."""
-    if threshold <= 0.0:
-        raise ValueError("threshold must be strictly positive")
+def calculate_feature_p_value(observed_state, j, lambda_list, lam, Sigma_list, threshold=20.0, anchor_cache=None):
     X_list = observed_state["X_list"]
     Y_list = observed_state["Y_list"]
     folds = observed_state["folds"]
     n_list = observed_state["n_list"]
     M_obs = observed_state["M_obs"]
-    observed_solver = observed_state.get("solver", "homotopy")
-    if solver is None:
-        solver = observed_solver
-    if solver != observed_solver:
-        raise ValueError("Observed fitting and SI must use the same solver")
-    if j not in M_obs:
-        raise ValueError("The tested feature j must belong to M_obs")
-    if len(Sigma_list) != len(X_list):
-        raise ValueError("Sigma_list must contain one covariance per data block")
-
     n0 = n_list[-1]
     n = sum(n_list)
     Y = np.concatenate(Y_list)
@@ -94,35 +68,15 @@ def calculate_feature_p_value(observed_state, j, lambda_list, lam, Sigma_list, t
     z_max = max(threshold * stdev, z_obs)
     a, b = calculate_a_b(eta, Y, Sigma)
 
-    Z = compute_Z(X_list, folds, lam, a, b, M_obs, lambda_list, n_list, z_min, z_max, z_obs, anchor_cache=anchor_cache, solver=solver)
+    Z = compute_Z(X_list, folds, lam, a, b, M_obs, lambda_list, n_list, z_min, z_max, z_obs, anchor_cache=anchor_cache, solver=observed_state["solver"])
     p_value = calculate_TN_p_value(Z, eta, etaTY, Sigma)
     return p_value
 
 
 def SI_ACoRT(X_list, Y_list, lambda_list, lam, Sigma_list, T=5, threshold=20.0, solver="homotopy"):
-    """Return selective p-values for every feature selected by ACoRT."""
     observed_state = construct_observed_state(X_list, Y_list, lambda_list, lam, T, solver)
     if not observed_state["M_obs"]:
         return None
 
     anchor_cache = {}
-    return [
-        (
-            j,
-            calculate_feature_p_value(observed_state, j, lambda_list, lam, Sigma_list, threshold, anchor_cache),
-        )
-        for j in observed_state["M_obs"]
-    ]
-
-
-def SI_ACoRT_randj(X_list, Y_list, lambda_list, lam, Sigma_list, T=5, threshold=20.0, solver="homotopy"):
-    """Return the selective p-value for one random selected feature."""
-    observed_state = construct_observed_state(X_list, Y_list, lambda_list, lam, T, solver)
-    if not observed_state["M_obs"]:
-        return None
-    j = int(np.random.choice(observed_state["M_obs"]))
-    p_value = calculate_feature_p_value(observed_state, j, lambda_list, lam, Sigma_list, threshold, anchor_cache={})
-    return j, p_value
-
-
-__all__ = ["SI_ACoRT", "SI_ACoRT_randj", "calculate_feature_p_value", "construct_observed_state"]
+    return [(j, calculate_feature_p_value(observed_state, j, lambda_list, lam, Sigma_list, threshold, anchor_cache)) for j in observed_state["M_obs"]]

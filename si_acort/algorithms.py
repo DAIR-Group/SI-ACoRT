@@ -1,7 +1,3 @@
-"""Observed Lasso, CoRT, and adaptive source-selection procedures."""
-
-from __future__ import annotations
-
 import numpy as np
 
 from .homotopy import solve_weighted_lasso
@@ -26,13 +22,7 @@ def solve_lasso_skglm(X, Y, lam):
 
 
 def solve_lasso(X, Y, lam, solver="homotopy"):
-    if lam <= 0.0:
-        raise ValueError("lam must be strictly positive")
-    if solver == "homotopy":
-        return solve_lasso_homotopy(X, Y, lam)
-    if solver == "skglm":
-        return solve_lasso_skglm(X, Y, lam)
-    raise ValueError("solver must be 'homotopy' or 'skglm'")
+    return {"homotopy": solve_lasso_homotopy, "skglm": solve_lasso_skglm}[solver](X, Y, lam)
 
 
 def CoRT_homotopy(X_tilde, Y_tilde, w_tilde, p):
@@ -56,21 +46,10 @@ def CoRT_skglm(X_tilde, Y_tilde, w_tilde, p):
 
 
 def CoRT(X_tilde, Y_tilde, w_tilde, p, solver="homotopy"):
-    if p <= 0 or p > np.asarray(X_tilde).shape[1]:
-        raise ValueError("p is incompatible with the CoRT coefficient dimension")
-    if solver == "homotopy":
-        return CoRT_homotopy(X_tilde, Y_tilde, w_tilde, p)
-    if solver == "skglm":
-        return CoRT_skglm(X_tilde, Y_tilde, w_tilde, p)
-    raise ValueError("solver must be 'homotopy' or 'skglm'")
+    return {"homotopy": CoRT_homotopy, "skglm": CoRT_skglm}[solver](X_tilde, Y_tilde, w_tilde, p)
 
 
 def adaptive_source_selection(X_list, Y_list, folds, lam, solver="homotopy"):
-    if len(folds) % 2 == 0:
-        raise ValueError("The number of folds T must be odd for majority voting")
-    if len(X_list) != len(Y_list) or len(X_list) < 1:
-        raise ValueError("X_list and Y_list must contain the same data blocks")
-
     X0 = np.asarray(X_list[-1], dtype=float)
     Y0 = np.asarray(Y_list[-1], dtype=float).reshape(-1)
     votes = np.zeros(len(X_list) - 1, dtype=int)
@@ -94,6 +73,3 @@ def adaptive_source_selection(X_list, Y_list, folds, lam, solver="homotopy"):
 
     threshold = (len(folds) + 1) // 2
     return np.flatnonzero(votes >= threshold).tolist()
-
-
-__all__ = ["CoRT", "CoRT_homotopy", "CoRT_skglm", "adaptive_source_selection", "solve_lasso", "solve_lasso_homotopy", "solve_lasso_skglm"]

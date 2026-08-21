@@ -1,7 +1,3 @@
-"""Selection-event subproblems for the SI-ACoRT truncation region."""
-
-from __future__ import annotations
-
 from collections import defaultdict
 
 import numpy as np
@@ -132,7 +128,6 @@ def calculate_validation_loss_coefficients(segment, X_val, a_val, b_val):
 
 
 def compute_fold_selection_region(target_path, combined_path, X_val, a_val, b_val, z_min, z_max, tol=1e-8):
-    """Compute W_{t,k}, where augmented validation loss beats target-only."""
     result = []
     i = j = 0
     while i < len(target_path) and j < len(combined_path):
@@ -154,7 +149,6 @@ def compute_fold_selection_region(target_path, combined_path, X_val, a_val, b_va
 
 
 def compute_majority_selection_region(fold_regions, threshold, z_min, z_max, tol=1e-8 ):
-    """Compute R_k from the foldwise regions W_{t,k}."""
     endpoints = [z_min, z_max]
     for regions in fold_regions:
         for left, right in regions:
@@ -173,9 +167,6 @@ def compute_majority_selection_region(fold_regions, threshold, z_min, z_max, tol
 
 
 def compute_source_selection_partitions(X_list, folds, lam, a, b, z_min, z_max, z_obs, tol=1e-8, anchor_cache=None):
-    """Partition [z_min,z_max] into intervals with a fixed selected-source set."""
-    if len(folds) % 2 == 0:
-        raise ValueError("The number of folds T must be odd for majority voting")
     if anchor_cache is None:
         anchor_cache = {}
 
@@ -229,9 +220,6 @@ def compute_source_selection_partitions(X_list, folds, lam, a, b, z_min, z_max, 
 
 
 def compute_source_selection_partitions_skglm(X_list, folds, lam, a, b, z_min, z_max, tol=1e-8):
-    if len(folds) % 2 == 0:
-        raise ValueError("The number of folds T must be odd for majority voting")
-
     n_list = [X.shape[0] for X in X_list]
     slices = construct_block_slices(n_list)
     a0 = a[slices[-1]]
@@ -283,7 +271,6 @@ def compute_source_selection_partitions_skglm(X_list, folds, lam, a, b, z_min, z
 
 
 def compute_fixed_I_support_region(cort_path, target_start, p, M_obs, z_min, z_max, tol=1e-8):
-    """Compute G_I(M_obs) for a fixed selected-source set I."""
     observed_support = tuple(M_obs)
     result = []
     for segment in cort_path:
@@ -299,7 +286,6 @@ def compute_fixed_I_support_region(cort_path, target_start, p, M_obs, z_min, z_m
 
 
 def compute_Z_homotopy(X_list, folds, lam, a, b, M_obs, lambda_list, n_list, z_min, z_max, z_obs, tol=1e-8, anchor_cache=None):
-    """Compute the SI-ACoRT truncation region without conditioning on I_obs."""
     if anchor_cache is None:
         anchor_cache = {}
     partitions = compute_source_selection_partitions(X_list, folds, lam, a, b, z_min, z_max, z_obs, tol, anchor_cache)
@@ -355,9 +341,4 @@ def compute_Z_skglm(X_list, folds, lam, a, b, M_obs, lambda_list, n_list, z_min,
 def compute_Z(X_list, folds, lam, a, b, M_obs, lambda_list, n_list, z_min, z_max, z_obs, tol=1e-8, anchor_cache=None, solver="homotopy"):
     if solver == "homotopy":
         return compute_Z_homotopy(X_list, folds, lam, a, b, M_obs, lambda_list, n_list, z_min, z_max, z_obs, tol, anchor_cache)
-    if solver == "skglm":
-        return compute_Z_skglm(X_list, folds, lam, a, b, M_obs, lambda_list, n_list, z_min, z_max, tol)
-    raise ValueError("solver must be 'homotopy' or 'skglm'")
-
-
-__all__ = ["calculate_validation_loss_coefficients", "compute_Z", "compute_Z_homotopy", "compute_Z_skglm", "compute_fixed_I_support_region", "compute_fold_selection_region", "compute_majority_selection_region", "compute_source_selection_partitions", "compute_source_selection_partitions_skglm"]
+    return compute_Z_skglm(X_list, folds, lam, a, b, M_obs, lambda_list, n_list, z_min, z_max, tol)

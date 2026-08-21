@@ -1,7 +1,3 @@
-"""Response-parametric weighted-Lasso homotopy."""
-
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 import numpy as np
@@ -127,28 +123,15 @@ def _trace_ray(X, y_start, beta_start, response_direction, penalty_weights, t_li
 
 
 def compute_solution_path(X, y_anchor, response_slope, penalty_weights, z_anchor, z_min, z_max, beta_anchor=None, **trace_options):
-    """Return affine weighted-Lasso path segments and the anchor solution."""
     X = np.asfortranarray(np.asarray(X, dtype=float))
     y_anchor = np.asarray(y_anchor, dtype=float).reshape(-1)
     response_slope = np.asarray(response_slope, dtype=float).reshape(-1)
     penalty_weights = np.asarray(penalty_weights, dtype=float).reshape(-1)
-    if X.ndim != 2 or y_anchor.shape != (X.shape[0],):
-        raise ValueError("Incompatible X and y_anchor dimensions")
-    if response_slope.shape != y_anchor.shape:
-        raise ValueError("response_slope must have the response dimension")
-    if penalty_weights.shape != (X.shape[1],):
-        raise ValueError("penalty_weights must have the coefficient dimension")
-    if np.any(penalty_weights <= 0.0):
-        raise ValueError("penalty_weights must be strictly positive")
-    if not z_min <= z_anchor <= z_max:
-        raise ValueError("z_anchor must belong to [z_min, z_max]")
 
     if beta_anchor is None:
         _, beta_anchor = _trace_ray(X, np.zeros_like(y_anchor), np.zeros(X.shape[1]), y_anchor, penalty_weights, 1.0, **trace_options)
     else:
         beta_anchor = np.asarray(beta_anchor, dtype=float).reshape(-1)
-        if beta_anchor.shape != (X.shape[1],):
-            raise ValueError("beta_anchor has the wrong dimension")
         beta_anchor = _polish_solution(X, y_anchor, penalty_weights, beta_anchor)
 
     left_ray, _ = _trace_ray(X, y_anchor, beta_anchor, -response_slope, penalty_weights, z_anchor - z_min, **trace_options)
@@ -171,18 +154,8 @@ def compute_solution_path(X, y_anchor, response_slope, penalty_weights, z_anchor
 
 
 def solve_weighted_lasso(X, y, penalty_weights, **trace_options):
-    """Solve one weighted Lasso through the auxiliary path from zero."""
     X = np.asfortranarray(np.asarray(X, dtype=float))
     y = np.asarray(y, dtype=float).reshape(-1)
     penalty_weights = np.asarray(penalty_weights, dtype=float).reshape(-1)
-    if X.ndim != 2 or y.shape != (X.shape[0],):
-        raise ValueError("Incompatible X and y dimensions")
-    if penalty_weights.shape != (X.shape[1],):
-        raise ValueError("penalty_weights must have the coefficient dimension")
-    if np.any(penalty_weights <= 0.0):
-        raise ValueError("penalty_weights must be strictly positive")
     _, beta = _trace_ray(X, np.zeros_like(y), np.zeros(X.shape[1]), y, penalty_weights, 1.0, **trace_options)
     return beta
-
-
-__all__ = ["HomotopyError", "PathSegment", "compute_solution_path", "solve_weighted_lasso"]
