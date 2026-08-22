@@ -1,9 +1,53 @@
 # SI-ACoRT: Statistical Inference for Adaptive CoRT
 
-**SI-ACoRT** provides selective p-values after Adaptive CoRT source filtration
-and target-feature selection.
+**SI-ACoRT** is a Python package for statistically valid inference on target
+features selected by Adaptive Co-Regularization Transfer (Adaptive CoRT) in
+high-dimensional regression.
 
-## Requirements
+The framework accounts for the adaptive source-selection and
+target-feature-selection mechanisms by conditioning on the target active set
+selected by Adaptive CoRT and characterizing the corresponding truncation
+region.
+
+---
+
+## 🖼️ Method Overview
+
+### 1. The SI-ACoRT Framework
+Adaptive CoRT first identifies informative source tasks through
+cross-validation voting and then performs CoRT estimation using the selected
+sources. SI-ACoRT computes valid p-values for the resulting target features
+while accounting for their data-dependent selection.
+
+![SI-ACoRT overview](figures/si_acort_overview.png)
+*Figure 1: Overview of the Adaptive CoRT pipeline and the role of SI-ACoRT.*
+
+### 2. Source-Selection Regions
+Along the parameterized line $\mathbf{Y}(z)=\mathbf{a}+\mathbf{b}z$, the
+piecewise-linear Weighted Lasso solution paths determine the foldwise voting
+regions. Their boundaries partition the line into intervals on which the
+selected source set remains constant.
+
+![Source-selection regions](figures/source_selection_region.png)
+*Figure 2: Source-selection regions induced by cross-validation voting along the parameterized line.*
+
+### 3. Truncation-Region Construction
+The truncation region is
+
+```math
+\mathcal{Z}=\left\{z\in\mathbb{R}\mid\mathcal{M}(\mathbf{Y}(z))=\mathcal{M}_{\mathrm{obs}}\right\}.
+```
+
+Within each source-selection interval, CoRT estimation yields a target active
+set. SI-ACoRT takes the union of the intervals on which this active set equals
+$\mathcal{M}_{\mathrm{obs}}$.
+
+![Truncation-region construction](figures/truncation_region.png)
+*Figure 3: Illustration of the construction of the truncation region $\mathcal{Z}$.*
+
+---
+
+## 📦 Requirements
 
 The `homotopy` solver requires Python 3.8+ with
 [`numpy`](https://numpy.org/doc/stable/) and
@@ -11,7 +55,7 @@ The `homotopy` solver requires Python 3.8+ with
 and [`skglm>=0.5`](https://contrib.scikit-learn.org/skglm/). The parallel pivot
 example also uses [`joblib`](https://joblib.readthedocs.io/).
 
-## Usage
+## 🚀 Usage
 
 ```python
 import numpy as np
